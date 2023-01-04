@@ -34,17 +34,14 @@ namespace WindowsFormsApp1
         private readonly string persistentJsonFile;
         private readonly string persistentFilesFolder;
         private readonly string[] extensions;
-        private Dictionary<string, List<ListViewItem>> temporaryFiles =new Dictionary<string, List<ListViewItem>>();
         private string mediaPlayerPath;
         private List<string> videosToPlay;
         private List<Process> openedWindows = new List<Process>();
         private int indx;
-        private string selectedGridStyle;
         private int cols;
         private int rows;
         private CancellationToken ct;
         private CancellationTokenSource src;
-        private Image backgroundImage;
 
         public Form1()
         {
