@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.4.33122.133
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PotPlayerCollage", "WindowsFormsApp1\PotPlayerCollage.csproj", "{C91E49B3-5B59-4E41-AC75-E2956E5A8574}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C91E49B3-5B59-4E41-AC75-E2956E5A8574}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C91E49B3-5B59-4E41-AC75-E2956E5A8574}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C91E49B3-5B59-4E41-AC75-E2956E5A8574}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C91E49B3-5B59-4E41-AC75-E2956E5A8574}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D7844C6D-B201-4D1E-B4BA-550E7BAC93ED}
+	EndGlobalSection
+EndGlobal
