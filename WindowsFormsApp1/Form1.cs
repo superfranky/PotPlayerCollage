@@ -1,30 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization;
-using System.Security.Policy;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Xml.Linq;
-using FolderBrowserEx;
 using WindowsInput;
-using static System.Net.Mime.MediaTypeNames;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.ProgressBar;
 using FolderBrowserDialog = FolderBrowserEx.FolderBrowserDialog;
-using Image = System.Drawing.Image;
-using ListView = System.Windows.Forms.ListView;
 
 namespace WindowsFormsApp1
 {
@@ -350,7 +338,7 @@ namespace WindowsFormsApp1
             else
             {
 
-                CancelEet();
+                src.Cancel();
                 foreach (var proc in openedWindows)
                 {
                     if (proc.HasExited) continue;
@@ -362,10 +350,6 @@ namespace WindowsFormsApp1
             }
         }
         
-        private void CancelEet()
-        {
-            src.Cancel();
-        }
         private static List<Rectangle> GetSubRectangles(Rectangle rect, int cols, int rows)
         {
             List<Rectangle> srex = new List<Rectangle>();
@@ -404,29 +388,21 @@ namespace WindowsFormsApp1
 
                 if (isMuted)
                 {
-                    while (!proc.MainWindowTitle.Contains(Path.GetFileName(video)))
+                    await Task.Delay(500, ct);
+                    for (int i = 0; i < 20; i++)
                     {
-                        proc.Refresh();
-                    }
-
-                    await Task.Delay(500);
-
-                    SetCursorPos((int)subs[indx].X + 100, (int)subs[indx].Y + 100);
-
-                    var inp = new InputSimulator();
-                    //await Task.Delay(200);
-                    //inp.Mouse.LeftButtonClick();
-                    //await Task.Delay(200);
-                    for (int i = 0; i < 25; i++)
-                    {
-                        inp.Mouse.VerticalScroll(-1);
-                        Thread.Sleep(10);
+                        PostMessage(proc.MainWindowHandle, WM_KEYDOWN, VK_DOWN, 0);
                     }
                 }
+
                 indx++;
             }
 
         }
+        [DllImport("user32.dll")]
+        static extern bool PostMessage(IntPtr hWnd, UInt32 Msg, int wParam, int lParam);
+        const UInt32 WM_KEYDOWN = 0x0100;
+        const int VK_DOWN =	0x28;
 
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
@@ -435,10 +411,6 @@ namespace WindowsFormsApp1
         public const int SWP_NOSENDCHANGING = 0x0400;
         public const int SWP_NOZORDER = 0x0004;
         public const int SWP_SHOWWINDOW = 0x0040;
-
-
-        [DllImport("user32.dll")]
-        static extern bool SetCursorPos(int X, int Y);
 
         private readonly List<ListViewItem> originalFileViewState = new List<ListViewItem>();
         private bool isMuted;
