@@ -59,5 +59,35 @@ namespace PotPlayerCollage.Properties {
                 resourceCulture = value;
             }
         }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap _07be80ac1aca89855641c96abaf6ce9b9b3b44f0_500 {
+            get {
+                object obj = ResourceManager.GetObject("07be80ac1aca89855641c96abaf6ce9b9b3b44f0_500", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap _1673163788135772 {
+            get {
+                object obj = ResourceManager.GetObject("1673163788135772", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap _480b6172dc2e93d8428896aee8a079eee869d75f_1280 {
+            get {
+                object obj = ResourceManager.GetObject("480b6172dc2e93d8428896aee8a079eee869d75f_1280", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
     }
 }

@@ -65,6 +65,9 @@
     <ApplicationIcon>noun-porn-759968.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="AForge, Version=2.2.5.0, Culture=neutral, PublicKeyToken=c1db6ff4eaa06aeb, processorArchitecture=MSIL">
+      <HintPath>..\packages\AForge.2.2.5\lib\AForge.dll</HintPath>
+    </Reference>
     <Reference Include="FolderBrowserEx, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\FolderBrowserEx.1.0.1\lib\net47\FolderBrowserEx.dll</HintPath>
     </Reference>
@@ -178,6 +181,8 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="noun-porn-759968.ico" />
+    <None Include="Resources\480b6172dc2e93d8428896aee8a079eee869d75f_1280.jpg" />
+    <None Include="Resources\1673163788135772.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

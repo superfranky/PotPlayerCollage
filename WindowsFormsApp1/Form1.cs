@@ -7,154 +7,124 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using WindowsInput;
+using Microsoft.Win32;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.Rebar;
 using FolderBrowserDialog = FolderBrowserEx.FolderBrowserDialog;
 
 namespace WindowsFormsApp1
 {
     public partial class Form1 : Form
     {
-        private readonly string systemPath;
-        private readonly string persistentJsonFile;
-        private readonly string persistentFilesFolder;
-        private readonly string[] extensions;
-        private string mediaPlayerPath;
-        private List<string> videosToPlay;
-        private List<Process> openedWindows = new List<Process>();
-        private int indx;
+        private string systemPath;
+        private string persistentJsonFile;
+        private string persistentFilesFolder;
+        private string favoritesFile;
+        private string potPlayerPath;
+
+        private HashSet<string> extensions;
+
         private int cols;
         private int rows;
+
+        private List<string> videosToPlay = new List<string>();
+        private List<Process> openedWindows = new List<Process>();
+
+        private Rectangle screenRect;
+
         private CancellationToken ct;
         private CancellationTokenSource src;
 
+        private bool isMuted;
+        private bool randomUnmuted;
+
         public Form1()
         {
-            
             InitializeComponent();
+            Setup();
+        }
 
+        private void Setup()
+        {
             systemPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             persistentFilesFolder = Path.Combine(systemPath, "files");
             persistentJsonFile = Path.Combine(persistentFilesFolder, "PersistentData.json");
-            extensions = new string[] { "mp4", "mov", "wmv", "flv", "avi", "webm", "mkv" };
+            favoritesFile = Path.Combine(persistentFilesFolder, "Favorites.json");
+            extensions = new HashSet<string> { ".mp4", ".mov", ".wmv", ".flv", ".avi", ".webm", ".mkv" };
+            screenRect = new Rectangle(0, 0, Screen.PrimaryScreen.WorkingArea.Width, Screen.PrimaryScreen.WorkingArea.Height);
 
-            if (!Directory.Exists(persistentFilesFolder))
-            {
-                Directory.CreateDirectory(persistentFilesFolder);
-            }
+            var key = Registry.CurrentUser.OpenSubKey(@"Software\DAUM\PotPlayer64");
+            potPlayerPath = key?.GetValue("ProgramPath").ToString();
 
+            Directory.CreateDirectory(persistentFilesFolder);
             if (!File.Exists(persistentJsonFile))
             {
                 File.CreateText(persistentJsonFile);
             }
+            if (!File.Exists(favoritesFile))
+            {
+                File.Create(favoritesFile); 
+            }
 
-            Init();
-        }
-
-        private void Init()
-        {
             FolderView.ItemSelectionChanged += OnFolderSelected;
             FileView.ItemCheck += OnFileChecked;
 
             gridCols.SelectedItem = gridCols.Items[0];
             gridRows.SelectedItem = gridRows.Items[0];
-
         }
         bool EndsWithOneOf(string value, IEnumerable<string> suffixes)
         {
             return suffixes.Any(value.EndsWith);
         }
 
+        private List<string> filesFromFolder = new List<string>();
+        private List<List<string>> savedFolders = new List<List<string>>();
+        private Dictionary<string, List<string>> folderDict = new Dictionary<string, List<string>>();
         private void OnFolderSelected(object sender, ListViewItemSelectionChangedEventArgs e)
         {
             var folderPath = e.Item.Text;
-            var filesInFolder = Directory.GetFiles(folderPath);
-            var videoFilesInSelectedFolder = filesInFolder.Where(s => EndsWithOneOf(s, extensions)).ToList();
+            var videosInFolder = Directory.GetFiles(folderPath).Where(s => EndsWithOneOf(s, extensions)).ToList();
 
+            FileView.BeginUpdate();
             FileView.Items.Clear();
-            foreach (var videoFile in videoFilesInSelectedFolder)
+            foreach (var video in videosInFolder)
             {
-                var lvItem = new ListViewItem()
-                {
-                    Text = Path.GetFileName(videoFile),
-                    Tag = Path.GetDirectoryName(videoFile)
-                };
+                var fileName = Path.GetFileName(video);
+                var item = new ListViewItem(fileName);
 
-                var favorites = File.ReadAllLines(Path.Combine(persistentFilesFolder, "Favorites.json"));
-                foreach (var line in favorites)
+                var favorites = File.ReadAllLines(favoritesFile).ToList();
+                if (favorites.Contains(fileName))
                 {
-                    if (string.IsNullOrEmpty(line)) continue;
-                    var saveObj = JsonSerializer.Deserialize<FileViewItemSaveObj>(line);
-                    if (saveObj.FileName.Equals(lvItem.Text) && saveObj.FilePath.Equals(lvItem.Tag))
-                    {
-                        lvItem.Checked = saveObj.IsChecked;
-                    }
+                    item.Checked = true;
                 }
 
-
-                FileView.Items.Add(lvItem);
+                FileView.Items.Add(item);
             }
+            FileView.EndUpdate();
         }
 
         private void OnFileChecked(object sender, ItemCheckEventArgs e)
         {
-            var persistentFile = Path.Combine(persistentFilesFolder, "Favorites.json");
-            if (!File.Exists(persistentFile))
-            {
-                File.CreateText(persistentFile);
-            }
+            
+            var favorites = File.ReadAllLines(favoritesFile).ToList();
 
-            var saveItem = new FileViewItemSaveObj()
-            {
-                EndType = "FileItem",
-                FileName = FileView.Items[e.Index].Text,
-                FilePath = (string) FileView.Items[e.Index].Tag,
-                IsChecked = e.NewValue == CheckState.Checked
-            };
-
-            var jsonList = new List<string>();
             if (e.NewValue == CheckState.Checked)
             {
-                jsonList = File.ReadAllLines(persistentFile).ToList();
-
-                foreach (var line in jsonList)
+                if (!favorites.Contains(FileView.Items[e.Index].Text))
                 {
-                    if (string.IsNullOrEmpty(line)) continue;
-                    var saveObj = JsonSerializer.Deserialize<FileViewItemSaveObj>(line);
-                    if (saveObj.FileName.Equals(saveItem.FileName))
-                    {
-                        return;
-                    }
+                    favorites.Add(FileView.Items[e.Index].Text);
                 }
-
-                jsonList.Add(JsonSerializer.Serialize(saveItem));
             }
             else
             {
-                jsonList = File.ReadAllLines(persistentFile).ToList();
-                string lineToRemove = string.Empty;
-                foreach (var line in jsonList)
+                if (favorites.Contains(FileView.Items[e.Index].Text))
                 {
-                    if (string.IsNullOrEmpty(line)) continue;
-                    var saveObj = JsonSerializer.Deserialize<FileViewItemSaveObj>(line);
-                    if (saveObj.FileName.Equals(saveItem.FileName))
-                    {
-                        lineToRemove = line;
-                    }
+                    favorites.Remove(FileView.Items[e.Index].Text);
                 }
-
-                if (!string.IsNullOrEmpty(lineToRemove))
-                {
-                    jsonList.Remove(lineToRemove);
-                }
-
             }
-
-            File.WriteAllLines(persistentFile, jsonList);
-
+            File.WriteAllLines(favoritesFile, favorites);
 
         }
 
@@ -170,11 +140,7 @@ namespace WindowsFormsApp1
 
             foreach (var folderPath in selectedFolders)
             {
-                var lvItem = new ListViewItem
-                {
-                    Text = folderPath
-                };
-
+                var lvItem = new ListViewItem(folderPath);
                 FolderView.Items.Add(lvItem);
             }
         }
@@ -188,23 +154,12 @@ namespace WindowsFormsApp1
             {
                 var saveItem = new FolderViewItemSaveObj()
                 {
-                    EndType = "FolderItem",
                     FolderPath = item.Text,
                     IsChecked = item.Checked
                 };
 
                 jsonList.Add(JsonSerializer.Serialize(saveItem));
             }
-
-            var playerItem = new PlayerSaveObj()
-            {
-                EndType = "Player",
-                FilePath = MediaPlayerTitle.Tag.ToString(),
-                FileName = MediaPlayerTitle.Text
-            };
-            jsonList.Add(JsonSerializer.Serialize(playerItem));
-
-
             File.WriteAllLines(persistentJsonFile, jsonList);
 
             base.OnClosing(e);
@@ -212,62 +167,40 @@ namespace WindowsFormsApp1
 
         protected override void OnLoad(EventArgs e)
         {
+            if (!File.Exists(persistentJsonFile))
+            {
+                return;
+            }
             var jsonLines = File.ReadAllLines(persistentJsonFile).ToList();
+
+            FolderView.BeginUpdate();
 
             foreach (var line in jsonLines)
             {
-                var obj = JsonSerializer.Deserialize<SaveObj>(line);
-
-                switch (obj.EndType)
+                var saveObj = JsonSerializer.Deserialize<FolderViewItemSaveObj>(line);
+                var lvItem = new ListViewItem()
                 {
-                    case "FolderItem":
-                        {
-                            var saveObj = JsonSerializer.Deserialize<FolderViewItemSaveObj>(line);
+                    Text = saveObj.FolderPath,
+                    Checked = saveObj.IsChecked
+                };
 
-                            var lvItem = new ListViewItem()
-                            {
-                                Text = saveObj.FolderPath,
-                                Checked = saveObj.IsChecked
-                            };
-
-                            FolderView.Items.Add(lvItem);
-                            break;
-                        }
-                    case "Player":
-                        {
-                            var saveObj = JsonSerializer.Deserialize<PlayerSaveObj>(line);
-                            MediaPlayerTitle.Tag = saveObj.FilePath;
-                            MediaPlayerTitle.Text = saveObj.FileName;
-                            break;
-                        }
-                }
+                FolderView.Items.Add(lvItem);
             }
+
 
             if (FolderView.Items.Count > 0)
             {
                 FolderView.Items[0].Selected = true;
             }
 
+            FolderView.EndUpdate();
             base.OnLoad(e);
         }
 
-        public class FolderViewItemSaveObj : SaveObj
+        public class FolderViewItemSaveObj
         {
             public string FolderPath { get; set; }
             public bool IsChecked { get; set; }
-        }
-
-        public class FileViewItemSaveObj : SaveObj
-        {
-            public string FilePath { get; set; }
-            public string FileName { get; set; }
-            public bool IsChecked { get; set; }
-        }
-
-        public class PlayerSaveObj : SaveObj
-        {
-            public string FilePath { get; set; }
-            public string FileName { get; set; }
         }
 
         private void FolderView_MouseClick(object sender, MouseEventArgs e)
@@ -289,55 +222,51 @@ namespace WindowsFormsApp1
             }
         }
 
-        private void btnSelectPlayer_Click(object sender, EventArgs e)
-        {
-            var fileBrowser = new OpenFileDialog();
-            fileBrowser.ShowDialog();
-            MediaPlayerTitle.Text = fileBrowser.SafeFileName;
-            MediaPlayerTitle.Tag = fileBrowser.FileName;
-        }
+        private bool btnClicked = false;
+        private int videoRandom;
+        private List<Rectangle> subs;
 
         private void StartBtn_Click(object sender, EventArgs e)
         {
 
-            if (StartBtn.Text.Equals("START"))
+            if (!btnClicked)
             {
-                Debug.WriteLine("before calling new method");
-                mediaPlayerPath = MediaPlayerTitle.Tag.ToString();
-                var favoriteVideos = File.ReadAllLines(Path.Combine(persistentFilesFolder, "Favorites.json"));
+                StartBtn.Text = "END";
+                btnClicked = true;
 
-                var videos = new List<string>();
+                var foldersToVideos = new Dictionary<string, List<string>>();
+
                 foreach (ListViewItem checkedFolder in FolderView.CheckedItems)
                 {
-
-                    foreach (var favoriteVideo in favoriteVideos)
-                    {
-                        var saveObj = JsonSerializer.Deserialize<FileViewItemSaveObj>(favoriteVideo);
-                        if (saveObj.FilePath.Equals(checkedFolder.Text))
-                        {
-                            videos.Add(Path.Combine(saveObj.FilePath, saveObj.FileName));
-                        }
-
-                    }
+                    var videosInFolder = Directory.GetFiles(checkedFolder.Text).Where(s => extensions.Contains(Path.GetExtension(s))).Select(Path.GetFileName).ToList();
+                    foldersToVideos.Add(checkedFolder.Text, videosInFolder);
                 }
 
-                cols = int.Parse(gridCols.SelectedItem.ToString());
-                rows = int.Parse(gridRows.SelectedItem.ToString());
-                isMuted = MuteCheckBox.Checked;
+                var allFavorites = File.ReadAllLines(favoritesFile).ToList();
+                var videos = foldersToVideos.SelectMany(kvp => kvp.Value.Where(v => allFavorites.Contains(v)).Select(v => Path.Combine(kvp.Key, v))).ToList();
 
-                Random rand = new Random();
-                videosToPlay = videos.OrderBy(_ => rand.Next()).Take(cols * rows).ToList();
-                StartBtn.Text = "END";
+                var rand = new Random();
+                for (var i = 0; i < videos.Count - 1; i++)
+                {
+                    var j = rand.Next(i, videos.Count);
+                    (videos[i], videos[j]) = (videos[j], videos[i]);
+                }
 
+                
+                videosToPlay.Clear();
+                videosToPlay.AddRange(videos.Take(cols * rows));
 
-                //Form.ActiveForm.TopMost = true;
                 src = new CancellationTokenSource();
                 ct = src.Token;
-                Task.Run(OpenWindows, ct);
+
+                videoRandom = new Random().Next(0, videosToPlay.Count);
+                subs = GetSubRectangles(screenRect, cols, rows);
+
+
+                _ = Task.Run(OpenWindows, ct);
             }
             else
             {
-
                 src.Cancel();
                 foreach (var proc in openedWindows)
                 {
@@ -345,33 +274,37 @@ namespace WindowsFormsApp1
                     proc.Kill();
                 }
 
-                indx = 0;
+                openedWindows.Clear();
+
                 StartBtn.Text = "START";
+                btnClicked = false;
             }
         }
-        
+
+
         private static List<Rectangle> GetSubRectangles(Rectangle rect, int cols, int rows)
         {
-            List<Rectangle> srex = new List<Rectangle>();
-            int w = rect.Width / cols;
-            int h = rect.Height / rows;
+            var srex = new List<Rectangle>(cols * rows);
+            int xStep = rect.Width / cols;
+            int yStep = rect.Height / rows;
 
-            for (int c = 0; c < cols; c++)
-            for (int r = 0; r < rows; r++)
-                srex.Add(new Rectangle(w * c, h * r, w, h));
+            for (int i = 0; i < cols * rows; i++)
+            {
+                int x = (i % cols) * xStep;
+                int y = (i / cols) * yStep;
+                srex.Add(new Rectangle(x, y, xStep, yStep));
+            }
+
             return srex;
         }
 
         private async Task OpenWindows()
         {
-            var rect = new Rectangle(0, 0, Screen.PrimaryScreen.WorkingArea.Width, Screen.PrimaryScreen.WorkingArea.Height);
-
-            indx = 0;
-            var subs = GetSubRectangles(rect, cols, rows);
+            var indx = 0;
 
             foreach (var video in videosToPlay)
             {
-                var proc = Process.Start(mediaPlayerPath, video);
+                var proc = Process.Start(potPlayerPath, video);
                 while (!proc.MainWindowTitle.Equals("PotPlayer"))
                 {
                     if (ct.IsCancellationRequested)
@@ -380,6 +313,7 @@ namespace WindowsFormsApp1
                         return;
                     }
 
+                    await Task.Delay(100);
                     proc.Refresh();
                 }
                 
@@ -388,85 +322,51 @@ namespace WindowsFormsApp1
 
                 if (isMuted)
                 {
-                    await Task.Delay(500, ct);
-                    for (int i = 0; i < 20; i++)
-                    {
-                        PostMessage(proc.MainWindowHandle, WM_KEYDOWN, VK_DOWN, 0);
-                    }
-                }
+                    await Task.Delay(500); // wait for PotPlayer to fully load
 
+                    int key;
+                    if (!randomUnmuted || indx != videoRandom) key = VK_DOWN;
+                    else key = VK_UP;
+
+                    SendKeyMessage(proc, key);
+                }
                 indx++;
             }
-
         }
-        [DllImport("user32.dll")]
-        static extern bool PostMessage(IntPtr hWnd, UInt32 Msg, int wParam, int lParam);
-        const UInt32 WM_KEYDOWN = 0x0100;
-        const int VK_DOWN =	0x28;
 
-        [DllImport("user32.dll", SetLastError = true)]
-        static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+        private void SendKeyMessage(Process proc, int key)
+        {
+            for (var i = 0; i < 20; i++)
+            {
+                PostMessage(proc.MainWindowHandle, WM_KEYDOWN, key, 0);
+            }
+        }
 
-        public const int SWP_ASYNCWINDOWPOS = 0x4000;
-        public const int SWP_NOSENDCHANGING = 0x0400;
-        public const int SWP_NOZORDER = 0x0004;
-        public const int SWP_SHOWWINDOW = 0x0040;
-
-        private readonly List<ListViewItem> originalFileViewState = new List<ListViewItem>();
-        private bool isMuted;
+        public void PopulateFileViewWithFoundFiles(string path, string searchQuery = "")
+        {
+            var dinfo = new DirectoryInfo(path);
+            var files = dinfo.GetFiles().Where(s => extensions.Contains(s.Extension));
+            FileView.BeginUpdate();
+            FileView.Items.Clear();
+            var favorites = File.ReadAllLines(favoritesFile).ToList();
+            foreach (var fileInfo in files)
+            {
+                if (!string.IsNullOrEmpty(searchQuery))
+                {
+                    var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileInfo.Name);
+                    if (!fileNameWithoutExtension.ToLowerInvariant().Contains(searchQuery)) continue;
+                }
+                var lvItem = new ListViewItem(fileInfo.Name) {Checked = favorites.Contains(fileInfo.Name)};
+                FileView.Items.Add(lvItem);
+            }
+            FileView.EndUpdate();
+        }
 
         private void SearchBox_TextChanged(object sender, EventArgs e)
         {
-            if (originalFileViewState.Count <= 0)
-            {
-                foreach (ListViewItem item in FileView.Items)
-                {
-                    originalFileViewState.Add((ListViewItem)item.Clone());
-                }
-            }
-
-            foreach (ListViewItem fileViewItem in FileView.Items)
-            {
-                foreach (var origItem in originalFileViewState)
-                {
-                    if (origItem.Text.Equals(fileViewItem.Text))
-                    {
-                        origItem.Checked = fileViewItem.Checked;
-                    }
-                }
-            }
-
-            var searchString = SearchBox.Text.ToLowerInvariant();
-            if (string.IsNullOrEmpty(searchString))
-            {
-                FileView.Items.Clear();
-                FileView.Items.AddRange(originalFileViewState.ToArray());
-                originalFileViewState.Clear();
-                return;
-            }
-
-            var pattern = @"([^.]+)";
-            var filesToAdd = new List<ListViewItem>();
-
-            foreach (var item in originalFileViewState)
-            {
-                var fileName = item.Text.ToLowerInvariant();
-                
-                var truncatedFileName = Regex.Match(fileName, pattern).Value;
-
-
-                if (truncatedFileName.Contains(searchString))
-                {
-                    filesToAdd.Add((ListViewItem)item.Clone());
-                }
-            }
-
-            if (filesToAdd.Any())
-            {
-                NumFiles.Text = filesToAdd.Count.ToString();
-                FileView.Items.Clear();
-                FileView.Items.AddRange(filesToAdd.ToArray());
-            }
+            var searchQuery = SearchBox.Text.ToLowerInvariant();
+            var directoryPath = FolderView.SelectedItems[0].Text;
+            PopulateFileViewWithFoundFiles(directoryPath, searchQuery);
         }
 
         private void FileView_MouseClick(object sender, MouseEventArgs e)
@@ -481,17 +381,57 @@ namespace WindowsFormsApp1
 
         private void OpenInFolder_Click(object sender, EventArgs e)
         {
-            
-            foreach (ListViewItem selectedItem in FileView.SelectedItems)
-            {
-                Process.Start("explorer.exe",
-                    $"/select,{Path.Combine(selectedItem.Tag.ToString(), selectedItem.Text)}");
-            }
+            var selectedFolder = FolderView.SelectedItems.Count > 0 ? FolderView.SelectedItems[0].Text : null;
+            var selectedVideo = FileView.SelectedItems.Count > 0 ? FileView.SelectedItems[0].Text : null;
+
+            if (selectedFolder == null || selectedVideo == null) return;
+            var fullVideoPath = Path.Combine(selectedFolder, selectedVideo);
+            Process.Start("explorer.exe", $"/select, {fullVideoPath}");
+        }
+
+        private void gridCols_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            cols = int.Parse(gridCols.SelectedItem.ToString());
+        }
+
+        private void gridRows_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
+            rows = int.Parse(gridRows.SelectedItem.ToString());
+        }
+
+        private void MuteCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            isMuted = MuteCheckBox.Checked;
+        }
+
+        [DllImport("user32.dll")]
+        static extern bool PostMessage(IntPtr hWnd, UInt32 Msg, int wParam, int lParam);
+        const UInt32 WM_KEYDOWN = 0x0100;
+        const int VK_DOWN =	0x28;
+        private const int VK_UP = 0x26;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+        public const int SWP_ASYNCWINDOWPOS = 0x4000;
+        public const int SWP_NOSENDCHANGING = 0x0400;
+        public const int SWP_NOZORDER = 0x0004;
+        public const int SWP_SHOWWINDOW = 0x0040;
+
+        private void openInPotPlayerToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var selectedFolder = FolderView.SelectedItems.Count > 0 ? FolderView.SelectedItems[0].Text : null;
+            var selectedVideo = FileView.SelectedItems.Count > 0 ? FileView.SelectedItems[0].Text : null;
+
+            if (selectedFolder == null || selectedVideo == null) return;
+            var fullVideoPath = Path.Combine(selectedFolder, selectedVideo);
+            Process.Start(potPlayerPath, fullVideoPath);
+        }
+
+        private void UnmuteCheckbox_CheckedChanged(object sender, EventArgs e)
+        {
+            randomUnmuted = UnmuteCheckbox.Checked;
         }
     }
 
-    public class SaveObj
-    {
-        public string EndType { get; set; }
-    }
 }
